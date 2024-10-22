@@ -24,11 +24,11 @@
  ********************************************************/
 team_t team = {
     /* Team name */
-    "ateam",
+    "jm",
     /* First member's full name */
-    "Harry Bovik",
+    "Jung JaeMyeong",
     /* First member's email address */
-    "bovik@cs.cmu.edu",
+    "wjdwoaud15@gmail.com",
     /* Second member's full name (leave blank if none) */
     "",
     /* Second member's email address (leave blank if none) */
@@ -80,7 +80,8 @@ static void *extend_heap(size_t words);
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
-static void *heap_listp; 
+static char *heap_listp; 
+static char *next_heap_listp;
 
 /* 
  * mm_init - initialize the malloc package.
@@ -106,6 +107,7 @@ int mm_init(void)
     // 끝 - header
     PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     /* Epilogue header */
     heap_listp += (2 * WSIZE);
+    next_heap_listp = heap_listp;
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
@@ -143,60 +145,57 @@ static void *extend_heap(size_t words)
  */
 void *mm_malloc(size_t size)
 {
-    size_t asize; /* Adjusted block size */
-    size_t extendsize; /* Amount to extend heap if no fit */
-    char *bp;
 
     /* Ignore spurious requests */
     if (size == 0)
         return NULL;
 
-    /* Adjust block size to include overhead and alignment reqs. */
+    size_t asize; /* Adjusted block size */
+    char *bp;
+
     if (size <= DSIZE)
         asize = 2 * DSIZE;
     else
-
-    // 올림(8진법 올림)
-    // 1 -> 8
-    // 2 -> 8
-    // 7 -> 8
-    // 12 -> 16
-
-    // 5 + 7 / 8 * 8 = 8의 배수
-    // 8
-
-    // A(C + B)
-    // AC + AB
-
-        // asize = DSIZE * ((size + (DSIZE) + (DSIZE - 1)) / DSIZE);
         asize = ((size + (DSIZE-1)) / DSIZE) * DSIZE + DSIZE;
 
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL) {
         place(bp, asize);
+        bp = next_heap_listp;
         return bp;
     }
 
     /* No fit found. Get more memory and place the block */
-    extendsize = MAX(asize, CHUNKSIZE);
+    size_t extendsize = MAX(asize, CHUNKSIZE);
     if ((bp = extend_heap(extendsize / WSIZE)) == NULL)
         return NULL;
 
     place(bp, asize);
+    next_heap_listp = bp;
     return bp;
 }
 
 static void *find_fit(size_t asize)
 {
-    /* First-fit search */
-    void *bp;
+    /* next - fit */
 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+    void *bp = NULL;
+
+    for (bp = NEXT_BLKP(next_heap_listp); GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+            next_heap_listp = bp;
             return bp;
         }
     }
-    return NULL; /* No fit */
+
+    for (bp = NEXT_BLKP(heap_listp); GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+            next_heap_listp = bp;
+            return bp;
+        }
+    }
+
+    return NULL;
 }
 
 static void place(void *bp, size_t asize)
@@ -253,6 +252,7 @@ static void *coalesce(void *bp)
     size_t size = GET_SIZE(HDRP(bp));
 
     if (prev_alloc && next_alloc) { /* Case 1 */
+        next_heap_listp = bp;
         return bp;
     }
 
@@ -288,6 +288,8 @@ static void *coalesce(void *bp)
         bp = PREV_BLKP(bp);
     }
 
+    next_heap_listp = bp;
+
     return bp;
 }
 
@@ -303,11 +305,14 @@ void *mm_realloc(void *ptr, size_t size)
     newptr = mm_malloc(size);
     if (newptr == NULL)
       return NULL;
-    copySize = GET_SIZE(HDRP(oldptr));
-    //copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
+
+    copySize = GET_SIZE(HDRP(oldptr)) - DSIZE; // size에서 header, footer 제외 면적
+    
     if (size < copySize)
       copySize = size;
+
     memcpy(newptr, oldptr, copySize);
     mm_free(oldptr);
+
     return newptr;
 }
